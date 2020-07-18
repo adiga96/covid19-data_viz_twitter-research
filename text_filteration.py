@@ -1,3 +1,6 @@
+import re  
+import nltk
+
 # Functions for Tweet Filterations
 def remove_punct(text):
     text = ' '.join(re.sub("(@[A-Za-z0-9]+)|(RT)|(#[A-Za-z0-9]+)|(_[A-Za-z0-9]+)|([^0-9A-Za-z \t])|(\w+:\/\/\S+)"," ",text).split())
