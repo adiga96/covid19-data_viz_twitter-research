@@ -1,4 +1,4 @@
-# COVID-19: Classification of PPE tweets using Deep Learning
+# COVID-19; DATA VISUALIZATION OF CASES, HOSPITALISATION etc vs TWITTER DATA
 
 Tasks Completed:
 
