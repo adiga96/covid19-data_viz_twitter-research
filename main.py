@@ -161,213 +161,142 @@ ny_twitter_rtsum = RT_sum_calculator(twitter_data_datelist,ny_twitter)
 twitter_rtcount = RT_count_calculator(twitter_data_datelist,shortage_df)
 ny_twitter_rtcount = RT_count_calculator(twitter_data_datelist,ny_twitter)
 
-'''
-march_RT_sum = RT_sum_calculator(march_datelist, March_All_PPE)
-april_RT_sum = RT_sum_calculator(april_datelist, April_All_PPE)
-may_RT_sum = RT_sum_calculator(may_datelist, May_All_PPE)
-# june_RT_sum = RT_sum_calculator(june_datelist, June_All_PPE)
-# sum of all months
-us_sum_RT = march_RT_sum + april_RT_sum + may_RT_sum 
+#2. COVID TRACKING PROJECT- DATA
 
-march_RT = RT_count_calculator(march_datelist, March_All_PPE)
-april_RT = RT_count_calculator(april_datelist, April_All_PPE)
-may_RT= RT_count_calculator(may_datelist, May_All_PPE)
-# june_RT = RT_count_calculator(june_datelist, June_All_PPE)
-# sum of all months
-us_count_RT = march_RT + april_RT + may_RT
-'''
+# API request
+import requests
+url1 = 'https://api.covidtracking.com/v1/us/daily.json'
+url2 = 'https://api.covidtracking.com/v1/states/daily.json'
+r1 = requests.get(url1)
+r2 = requests.get(url2)
+data_dict_1 = r1.json()
+data_dict_2 = r2.json()
 
-# No. of COVID 19  Confirmed Cases
+Covid_DF = pd.DataFrame.from_dict(data_dict_1)
+Covid_states_DF = pd.DataFrame.from_dict(data_dict_2)
+# Covid_states_DF
 
-cases = pd.read_csv('/Users/pritishsadiga/Desktop/Twitter/Bing_Microsoft_COVID_19/Bing-COVID19-Data.csv')
-cases['Date'] = pd.to_datetime(cases['Updated'])
+# statehosp = pd.read_csv('/Users/pritishsadiga/Desktop/Twitter/2020_all/all-states-history (1).csv')
 
-US_cases = cases[(cases['Country_Region'] == 'United States') & (cases['AdminRegion1'].isnull())]
-US_cases = US_cases[US_cases['Date'].dt.month.between(3,7)]
-US_cases_list = US_cases['ConfirmedChange'].tolist()
-# US_cases_updated
+def state_extractor_COVTP(dataframe,state,mon_start,mon_end):
+    
+    df = dataframe[dataframe['state'] == state]
+    df = df.reset_index(drop= True)
 
-US_cases_list = US_cases['ConfirmedChange'].tolist()
-len(US_cases_list)
+    # Since the data doesn't have a timestamp, we need to convert the string dates to Timestamp
 
-# U.S State wise filteration
-US_nycases = cases[(cases['Country_Region'] == 'United States') & (cases['AdminRegion1'] == 'New York')
-					 & (cases['AdminRegion2'].isnull())]
-US_nycases = US_nycases[US_nycases['Date'].dt.month.between(3,7)]
+    initial_datelist = df['date'].tolist()
 
-US_nycases = US_nycases.reset_index(drop = True)
+    initial_date_df = pd.DataFrame(data=list(enumerate(initial_datelist, start=1)), columns=['id','int_date'])
+    # converting to timestamp
+    initial_date_df[['str_date']] = initial_date_df[['int_date']].applymap(str).applymap(lambda s: "{}-{}-{}".format(s[0:4],s[4:6],s[6:]))
+    df['datetime'] = pd.to_datetime(initial_date_df['str_date'])
+    # df['datetime'] = pd.to_datetime(df['date'])
+    df['date'] = [d.date() for d in df['datetime']]
 
-ny_cases = US_nycases['ConfirmedChange'].tolist()
+    df = df[df['datetime'].dt.month.between(mon_start,mon_end)]  #filter based on required months (month number)
+    df = df.reindex(index = df.index[::-1])    #to reverse the df
+    df = df.reset_index(drop=True)
+    df_reduced = df[['date','state','positive','negative','totalTestResults','positiveIncrease','negativeIncrease','total','hospitalizedCurrently', 
+                    'hospitalizedCumulative','hospitalizedIncrease','onVentilatorCurrently','onVentilatorCumulative','recovered','death',
+                    'deathConfirmed','deathProbable','deathIncrease','datetime']]
+    
+    return df_reduced
 
-# # To read State Confirmed Cases
-# NY_cases = pd.read_csv('/Users/pritishsadiga/Desktop/Twitter/Bing_Microsoft_COVID_19/NY_New_cases.csv')
-# # CA_cases = pd.read_csv('/Users/pritishsadiga/Desktop/Twitter/Bing_Microsoft_COVID_19/CA_New_cases.csv')
-# # FL_cases = pd.read_csv('/Users/pritishsadiga/Desktop/Twitter/Bing_Microsoft_COVID_19/FL_New_cases.csv')
-# # WA_cases = pd.read_csv('/Users/pritishsadiga/Desktop/Twitter/Bing_Microsoft_COVID_19/WA_New_cases.csv')
-# # NJ_cases = pd.read_csv('/Users/pritishsadiga/Desktop/Twitter/Bing_Microsoft_COVID_19/NJ_New_cases.csv')
-# # IL_cases = pd.read_csv('/Users/pritishsadiga/Desktop/Twitter/Bing_Microsoft_COVID_19/IL_New_cases.csv')
-'''
-NY_cases_count = NY_cases_count['ConfirmedChange'].tolist()
-# CA_cases_count = cases_count(CA_cases)ss
-# FL_cases_count = cases_count(FL_cases)
-# WA_cases_count = cases_count(WA_cases)
-# NJ_cases_count = cases_count(NJ_cases)
-# IL_cases_count = cases_count(IL_cases)
+# Month Wise
+New_York = state_extractor_COVTP(Covid_states_DF,'NY',3,9)
+# California = state_extractor_COVTP(Covid_states_DF,'CA',3,8)
+# Texas = state_extractor_COVTP(Covid_states_DF,'TX',3,8)
 
-'''
-# DF to find relative cases
-relative_cases_df = pd.DataFrame({'US_cases_count':cases_count,'NY_cases':NY_cases_count,
-								'CA_cases':CA_cases_count,'FL_cases':FL_cases_count,
-                                'WA_cases':WA_cases_count,'NJ_cases':NJ_cases_count,
-                                'IL_cases':IL_cases_count})
+# Recovered Cases (since -ve value found in data)
+recovered = New_York[['date','recovered']]
+recovered['recoveredIncrease'] =  recovered['recovered'].diff()
+recovered[recovered['recoveredIncrease'] < 0] = 0
+s = pd.concat([New_York,recovered['recoveredIncrease']], axis = 1)
+New_York = s
 
-NY_relcases = relative_count(relative_cases_df,'US_cases_count','NY_cases')
-# CA_relcases = relative_count(relative_cases_df,'US_cases_count','CA_cases')
-# FL_relcases = relative_count(relative_cases_df,'US_cases_count','FL_cases')
-# WA_relcases = relative_count(relative_cases_df,'US_cases_count','WA_cases')
-# NJ_relcases = relative_count(relative_cases_df,'US_cases_count','NJ_cases')
-# IL_relcases = relative_count(relative_cases_df,'US_cases_count','IL_cases')
+New_York_Viz = New_York[['date','datetime','state','positiveIncrease','hospitalizedCurrently','onVentilatorCurrently','recoveredIncrease','deathIncrease']]
+# California_Viz = California[['date','datetime','state','positiveIncrease','hospitalizedCurrently','onVentilatorCurrently','recoveredIncrease','deathIncrease']]
 
-relcases_norm = pd.DataFrame({'NY_relcases':NY_relcases,'CA_relcases':CA_relcases,
-								'FL_relcases':FL_relcases,'WA_relcases':WA_relcases,
-								'NJ_relcases':NJ_relcases,'IL_relcases':IL_relcases})
+#Normalising Data
+New_York_Viz_cases_Norm = normaliser(New_York_Viz[['positiveIncrease']])
+New_York_Viz_hosp_Norm = normaliser(New_York_Viz[['hospitalizedCurrently']])
+New_York_Viz_critical_Norm = normaliser(New_York_Viz[['onVentilatorCurrently']])
+New_York_Viz_recovered_Norm = normaliser(New_York_Viz[['recoveredIncrease']])
+New_York_Viz_death_Norm = normaliser(New_York_Viz[['deathIncrease']])
 
-NY_cases_norm = normaliser(relcases_norm[['NY_relcases']])
-# CA_cases_norm = normaliser(relcases_norm[['CA_relcases']])
-# FL_cases_norm = normaliser(relcases_norm[['FL_relcases']])
-# IL_cases_norm = normaliser(relcases_norm[['IL_relcases']])
-# WA_cases_norm = normaliser(relcases_norm[['WA_relcases']])
-# NJ_cases_norm = normaliser(relcases_norm[['NJ_relcases']])
-
-# plt.plot(NY_MAM_datelist,NY_hosp_list, label = "New York: Hospitalized")
-plt.plot(NY_MAM_datelist,Rel_NY_cases_count, label = "NY / U.S ")
-plt.plot(NY_MAM_datelist,Rel_NJ_cases_count, label = "NJ / U.S ")
-plt.plot(NY_MAM_datelist,Rel_WA_cases_count, label = "WA / U.S ")
-plt.plot(NY_MAM_datelist,Rel_FL_cases_count, label = "FL / U.S ")
-plt.plot(NY_MAM_datelist,Rel_IL_cases_count, label = "IL / U.S ")
-plt.plot(NY_MAM_datelist,Rel_CA_cases_count, label = "CA / U.S ")
-plt.xlabel('Date: March-April-May')
-plt.ylabel('Count')
-plt.xticks( rotation='vertical')
-plt.title('Relative Cases: Major States')
-# show a legend on the plot
-plt.legend()
+# Plot all COVID 19 data
+plt.plot(New_York_Viz['date'],New_York_Viz_cases_Norm,color='red')
+plt.plot(New_York_Viz['date'],New_York_Viz_hosp_Norm,color='blue')
+plt.plot(New_York_Viz['date'],New_York_Viz_critical_Norm,color='green')
+plt.plot(New_York_Viz['date'],New_York_Viz_recovered_Norm,color='brown')
+plt.plot(New_York_Viz['date'],New_York_Viz_death_Norm,color='black')
 plt.rcParams['figure.figsize']= [20,5]
-# Display a figure.
-plt.show()
 
 
-# HOSPITALIZATION DATA
-
-
-US_hosp['datetime'] = pd.to_datetime(US_hosp['dateChecked'])
-US_hosp = US_hosp.reset_index(drop=True)
-
-#filter based on required months (month number)
-US_hosp = US_hosp[US_hosp['datetime'].dt.month.between(3,7)]  
-
-US_hosp = US_hosp.reindex(index = US_hosp.index[::-1])    #to reverse the df
-US_hosp = US_hosp.reset_index(drop=True)
-US_hosp_list = US_hosp['hospitalizedCurrently'].fillna(0).tolist()
-nyhosp  = nyhosp.reindex(index = nyhosp.index[::-1]) 
-nyhosp = nyhosp.reset_index(drop = True)
-nyhosp_1 = nyhosp[['date','hospitalizedCurrently']]
-
+#3. Nursing Homes and Medical Center Data
 covid_nursing = pd.read_csv('/Users/pritishsadiga/Desktop/Twitter/2020_all/COVID-19_Nursing_Home_Dataset.csv')
 
 
 covid_nursing['datetime'] = pd.to_datetime(covid_nursing['Week Ending'])
 covid_nursing = covid_nursing.reset_index(drop=True)
-
-#filter based on required months (month number)
-covid_nursing = covid_nursing[covid_nursing['datetime'].dt.month.between(3,7)]  
+covid_nursing = covid_nursing[covid_nursing['datetime'].dt.month.between(3,8)]  #filter based on required months (month number)
 covid_nursing  = covid_nursing.sort_values(by=['datetime'])
 covid_nursing = covid_nursing.reset_index(drop=True)
 
 short = covid_nursing[covid_nursing['Shortage of Aides'] == 'Y']
-
-# Function to extracting dates into a list
-def timestamp_extract(month_df):
-    month_df['date'] = [d.date() for d in month_df['datetime']]
-    month_datelist = month_df['date'].astype(str).unique().tolist()
-    return month_datelist
-
 short = short.reset_index(drop= True)
 
-dlist = timestamp_extract(shortage)
+# Extract weekend dates from May 2020
+dlist = timestamp_extract(short)
 
-def counter(shortage, datelist):
-    value = []
-    for i in dlist:
-        a = len(shortage[shortage['datetime'].dt.date.astype(str) == i])
-        value.append(a)
+# Function 4
+usa_shortage = counter(short,dlist)
+# len(dlist)
+covid_nursing.columns.tolist()
+usa_shortage = counter(short,dlist)
+usa_shortage
 
-    return value
+ny = short[short['Provider State'] == 'NY' ]
+ny = ny.reset_index(drop = True)
+ny_shortage = counter(ny,dlist)
 
-a = counter(short,dlist)
+#Define a Function for ALL Nursing Home Shortage Data
+'''
+ca = short[short['Provider State'] == 'CA' ]
+ca = ca.reset_index(drop = True)
+ca_shortage = counter(ca,dlist)
+# ny_shortage
 
-ny_short = short[short['Provider State'] == 'NY']
-ny_short = ny_short.reset_index(drop = True)
-b = counter(ny_short,dlist)
-# DF = pd.DataFrame({'date':dlist,'medical':a})
+ny_DF_complete = pd.DataFrame({'Date':dlist,'Shortage':ny_shortage})
+ca_DF_complete = pd.DataFrame({'Date':dlist,'Shortage':ca_shortage})
+fl_DF_complete = pd.DataFrame({'Date':dlist,'Shortage':fl_shortage})
+tx_DF_complete = pd.DataFrame({'Date':dlist,'Shortage':tx_shortage})
+az_DF_complete = pd.DataFrame({'Date':dlist,'Shortage':az_shortage})
+wa_DF_complete = pd.DataFrame({'Date':dlist,'Shortage':wa_shortage})
+nj_DF_complete = pd.DataFrame({'Date':dlist,'Shortage':nj_shortage})
 
-DF_ny = pd.DataFrame({'date':dlist,'medical':b})
-# creating DF from the Lists above
-DF_complete = pd.DataFrame({'date':twitter_data_datelist,'US_sum_RT':twitter_rtsum,
-							'US_count_RT':twitter_rtcount,'US_cases':US_cases_list,
-							'all_hosp':US_hosp_list})
-							
-# creating DF from the Lists above
-ny_DF_complete = pd.DataFrame({'date':twitter_data_datelist,'US_sum_RT':ny_twitter_rtsum,
-								'US_count_RT':ny_twitter_rtcount,'US_cases':ny_cases})	
-								
-leftjoin_NY = pd.merge(ny_DF_complete,DF_ny, on='date', how='left')
-NY_plot_med = pd.merge(leftjoin_NY,nyhosp_1, on='date', how='left')
-leftjoin_NY.to_csv('/Users/pritishsadiga/Desktop/leftnyhosp.csv')
-nyhosp_1.to_csv('/Users/pritishsadiga/Desktop/nyhosp.csv')
-nyhosp_1.to_csv('/Users/pritishsadiga/Desktop/nyhosp.csv')
-finallll = pd.read_csv('/Users/pritishsadiga/Desktop/leftnyhosp.csv')
+def short_plot(shortagelist,hosplist,dlist,label):
 
-    
-    # Normalised Tweets
-RTsum_norm = normaliser(leftjoin_med[['US_sum_RT']])
-RTcount_norm = normaliser(leftjoin_med[['US_count_RT']])
-# Normalised hospital cases
-hosp_norm = normaliser(leftjoin_med[['all_hosp']])
-# Normalsied Confirmed Cases
-cases_norm = normaliser(leftjoin_med[['US_cases']])
-med_norm = normaliser(leftjoin_med[['medical']])
+    x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,12]
+    # grades = ['F', 'D', 'C', 'B', 'A'] DATElist
+    plt.title(f"{label}")
+    plt.xlabel("Date")
+    plt.ylabel("Count")
 
-# Normalised Tweets
-NY_RTsum_norm = normaliser(finallll[['US_sum_RT']])
-NY_RTcount_norm = normaliser(finallll[['US_count_RT']])
-# Normalised hospital cases
-NY_hosp_norm = normaliser(finallll[['hosp']])
-# Normalsied Confirmed Cases
-NY_ases_norm = normaliser(finallll[['US_cases']])
-NY_med_norm = normaliser(finallll[['medical']])
+    # plt.bar(x, ny_shortage, color = "orange", edgecolor = 'black', linewidth = 1)
+    plt.plot(x, shortagelist, '-o',color='red', label = 'Shortage reported')
+    plt.plot(dlist, hosplist, '-o', color = 'blue', label = 'Total Hospitalizations')
+    plt.xticks(x,dlist)
 
-plot_graph(twitter_data_datelist,NY_RTsum_norm,'Shortage NY Tweets',NY_hosp_norm ,
-			'Hospitalisation NY', NY_ases_norm,'CasesNY',NY_med_norm,'Reported Shortage NY')
-			
-import matplotlib.pyplot as plt
-def plot_graph(datelist,tweets,label1, hosp,label2, cases,label3,med,label4):
-    
-    plt.plot(datelist,hosp, label = label2)
-    plt.plot(datelist,tweets, label = label1)
-    plt.plot(cases, label = label3)
-    # plt.scatter(datelist, med, marker='o',label = label4)
-    plt.plot(datelist, med, '-o', color='red', label = label4)
-    plt.xlabel('Date: March-April-May 2020')
-    plt.ylabel('Count')
-    plt.xticks( rotation='vertical')
-    plt.title('Cases vs Tweets :Unique PPE')
-    # show a legend on the plot
+    # Bar Charts with Values in Center
+    '''
+    xlocs, _ = plt.xticks()
+    i = 0
+    for j in shortagelist:
+        plt.text(xlocs[i] - 0.1, j + 2, str(j))
+        i += 1
+    '''
     plt.legend()
-    # Display a figure
     plt.rcParams['figure.figsize']= [20,5]
-    
     return plt.show()
-    
-plot_graph(twitter_data_datelist,RTcount_norm,'Shortage Tweets',hosp_norm ,'Hospitalisation',
-			cases_norm,'Cases',v,'Reported Shortage')
